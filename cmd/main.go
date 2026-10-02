@@ -1,18 +1,15 @@
 package main
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
-	"io"
 	"log"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/M1ngdaXie/mini-e2b/internal/fc"
 )
 
 const (
@@ -47,50 +44,14 @@ type action struct {
 	ActionType string `json:"action_type"`
 }
 
-func NewUDSClient(sockPath string, timeout time.Duration) *http.Client {
-	return &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				var d net.Dialer
-				return d.DialContext(ctx, "unix", sockPath)
-			},
-		},
-	}
-}
-
-func UDSRequest(client *http.Client, method, url string, headers map[string]string, body []byte) (int, http.Header, []byte, error) {
-
-	req, err := http.NewRequest(method, url, bytes.NewReader(body))
-	if err != nil {
-		return 0, nil, nil, err
-	}
-	for key, value := range headers {
-		req.Header.Set(key, value)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, nil, nil, err
-	}
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, nil, nil, err
-	}
-	// if resp.StatusCode != 204 {
-	// 	return 0, nil, nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, respBody)
-	// }
-	return resp.StatusCode, resp.Header, respBody, nil
-}
-
 func main() {
 	baseurl := "http://localhost/"
 	os.Remove(sockPath)
 	cmd := exec.Command("/home/mingda/firecracker/firecracker", "--api-sock", sockPath)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
 
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
 	err := cmd.Start()
 	if err != nil {
 		log.Fatalf("Error starting firecracker: %v", err)
@@ -112,12 +73,11 @@ outer:
 			}
 		case err := <-errCh:
 			log.Printf("Error connecting to socket: %v", err)
-			log.Printf("Stderr : %s", stderr.String())
 			return
 		}
 	}
 
-	client := NewUDSClient(sockPath, timeout)
+	client := fc.NewUDSClient(sockPath, timeout)
 
 	//step one
 	bootSource := &boot_source{
@@ -130,7 +90,7 @@ outer:
 	}
 	log.Printf("Marshaled boot source : %s", b)
 	var body []byte
-	code, hdr, body, err := UDSRequest(client,
+	code, hdr, body, err := fc.UDSRequest(client,
 		"PUT",
 		baseurl+"boot-source",
 		map[string]string{"Content-Type": "application/json"},
@@ -152,7 +112,7 @@ outer:
 		log.Fatalf("Error marshal drive : %v", err)
 		return
 	}
-	code, hdr, body, err = UDSRequest(client,
+	code, hdr, body, err = fc.UDSRequest(client,
 		"PUT",
 		baseurl+"drives/rootfs",
 		map[string]string{"Content-Type": "application/json"},
@@ -172,7 +132,7 @@ outer:
 		log.Fatalf("Error marshal machine config : %v", err)
 		return
 	}
-	code, hdr, body, err = UDSRequest(client,
+	code, hdr, body, err = fc.UDSRequest(client,
 		"PUT",
 		baseurl+"machine-config",
 		map[string]string{"Content-Type": "application/json"},
@@ -191,7 +151,7 @@ outer:
 		log.Fatalf("Error marshal action : %v", err)
 		return
 	}
-	code, hdr, body, err = UDSRequest(client,
+	code, hdr, body, err = fc.UDSRequest(client,
 		"PUT",
 		baseurl+"actions",
 		map[string]string{"Content-Type": "application/json"},
