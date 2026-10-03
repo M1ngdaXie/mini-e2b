@@ -7,9 +7,13 @@ import (
 	"syscall"
 
 	"github.com/M1ngdaXie/mini-e2b/internal/fc"
+	"github.com/M1ngdaXie/mini-e2b/internal/server"
 )
 
 func main() {
+	s := server.NewServer("9999", nil)
+	log.Println("Server started")
+	log.Fatal(s.Start())
 	sockPath := "/tmp/fc.sock"
 	process, err := fc.NewVM(sockPath)
 	if err != nil {

@@ -1,6 +1,8 @@
 package fc
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"log"
@@ -24,11 +26,12 @@ const (
 )
 
 type VM struct {
-	Cmd      *exec.Cmd
-	SockPath string
-	client   *http.Client
-	done     chan struct{}
-	exitErr  error
+	Cmd       *exec.Cmd
+	SandboxID string
+	SockPath  string
+	client    *http.Client
+	done      chan struct{}
+	exitErr   error
 }
 
 func NewVM(sockPath string) (*VM, error) {
@@ -39,6 +42,7 @@ func NewVM(sockPath string) (*VM, error) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
+
 	err := cmd.Start()
 	if err != nil {
 		log.Printf("Error starting firecracker: %v", err)
@@ -46,11 +50,12 @@ func NewVM(sockPath string) (*VM, error) {
 	}
 	done := make(chan struct{})
 	v := &VM{
-		Cmd:      cmd,
-		SockPath: sockPath,
-		client:   client,
-		done:     done,
-		exitErr:  nil,
+		Cmd:       cmd,
+		SandboxID: NewID(),
+		SockPath:  sockPath,
+		client:    client,
+		done:      done,
+		exitErr:   nil,
 	}
 	go func() {
 		err := cmd.Wait()
@@ -184,4 +189,9 @@ func (v *VM) Done() <-chan struct{} {
 
 func (v *VM) ExitErr() error {
 	return v.exitErr
+}
+func NewID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return base64.RawURLEncoding.EncodeToString(b)
 }
