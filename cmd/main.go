@@ -14,8 +14,10 @@ func main() {
 	s := server.NewServer("9999", nil)
 	log.Println("Server started")
 	log.Fatal(s.Start())
-	sockPath := "/tmp/fc.sock"
-	process, err := fc.NewVM(sockPath)
+
+	signCh := make(chan os.Signal, 1)
+	signal.Notify(signCh, os.Interrupt, syscall.SIGTERM)
+	process, err := fc.NewVM()
 	if err != nil {
 		log.Fatalf("Error creating VM : %v", err)
 	}
@@ -24,8 +26,6 @@ func main() {
 		log.Fatalf("Error booting VM : %v", err)
 	}
 
-	signCh := make(chan os.Signal, 1)
-	signal.Notify(signCh, os.Interrupt, syscall.SIGTERM)
 out:
 	for {
 		select {

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -34,7 +35,9 @@ type VM struct {
 	exitErr   error
 }
 
-func NewVM(sockPath string) (*VM, error) {
+func NewVM() (*VM, error) {
+	id := NewID()
+	sockPath := fmt.Sprintf("/tmp/fc-%s.sock", id)
 	os.Remove(sockPath)
 	cmd := exec.Command("/home/mingda/firecracker/firecracker", "--api-sock", sockPath)
 	timeout := 5 * time.Second
@@ -51,7 +54,7 @@ func NewVM(sockPath string) (*VM, error) {
 	done := make(chan struct{})
 	v := &VM{
 		Cmd:       cmd,
-		SandboxID: NewID(),
+		SandboxID: id,
 		SockPath:  sockPath,
 		client:    client,
 		done:      done,

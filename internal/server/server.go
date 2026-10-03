@@ -2,7 +2,10 @@ package server
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+
+	"github.com/M1ngdaXie/mini-e2b/internal/fc"
 )
 
 /*
@@ -16,6 +19,9 @@ DELETE /vms/{id}               停止
 type ListResponse struct {
 	Id    string `json:"id"`
 	State string `json:"state"`
+}
+type CreateResponse struct {
+	Id string `json:"id"`
 }
 type Server struct {
 	Addr    string
@@ -34,7 +40,8 @@ func NewServer(addr string, handler http.Handler) *Server {
 		w.Write([]byte("pong"))
 	})
 	mux.HandleFunc("GET /vms", s.handleListVms)
-	// mux.HandleFunc("POST /vms", handleOnlyVmCreate)
+	mux.HandleFunc("POST /vms", s.handleCreateVm)
+	mux.HandleFunc("DELETE /vms/{id}", s.handleDeleteVm)
 
 	s.Handler = mux
 	return s
@@ -54,9 +61,65 @@ func (s *Server) handleListVms(w http.ResponseWriter, r *http.Request) {
 			State: "Starting",
 		})
 	}
+	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	vm, err := fc.NewVM()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = vm.Boot()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Error Creating VM, stopping")
+		stopErr := vm.Stop()
+		if stopErr != nil {
+			log.Printf("Error Stopping VM: %v", stopErr)
+		}
+		return
+	}
+	s.vms.Add(vm)
+	go func() {
+		<-vm.Done()
+		err := vm.ExitErr()
+		if err != nil {
+			log.Printf("Exit error: %v", err)
+		}
+		stopErr := vm.Stop()
+		if stopErr != nil {
+			log.Printf("Error stopping VM : %v", stopErr)
+		}
+		s.vms.Remove(vm.SandboxID)
+	}()
+
+	resp := CreateResponse{
+		Id: vm.SandboxID,
+	}
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleDeleteVm(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	vm, ok := s.vms.Get(id)
+	if !ok {
+		http.Error(w, "VM not found", http.StatusNotFound)
+		return
+	}
+	err := vm.Stop()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.vms.Remove(id)
+	w.Write([]byte("VM deleted"))
 }
 
 // func handleOnlyVmCreate(w http.ResponseWriter, r *http.Request) {
