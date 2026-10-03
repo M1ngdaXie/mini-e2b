@@ -159,19 +159,19 @@ func (v *VM) Boot() error {
 }
 
 func (v *VM) Stop() error {
+	defer os.Remove(v.SockPath)
 	if v.Cmd != nil {
 		err := v.Cmd.Process.Signal(syscall.SIGKILL)
 		if errors.Is(err, os.ErrProcessDone) {
 			log.Println("Process already done")
-			os.Remove(v.SockPath)
 			return nil
 		}
 		if err != nil {
 			log.Printf("Error kill process : %v", err)
-			os.Remove(v.SockPath)
 			return err
 		}
 	}
+
 	return nil
 }
 
