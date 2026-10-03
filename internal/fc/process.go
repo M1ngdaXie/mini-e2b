@@ -27,13 +27,15 @@ type VM struct {
 	Cmd      *exec.Cmd
 	SockPath string
 	client   *http.Client
-	errCh    chan error
+	done     chan struct{}
+	exitErr  error
 }
 
 func NewVM(sockPath string) (*VM, error) {
 	os.Remove(sockPath)
 	cmd := exec.Command("/home/mingda/firecracker/firecracker", "--api-sock", sockPath)
-
+	timeout := 5 * time.Second
+	client := NewUDSClient(sockPath, timeout)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -42,10 +44,18 @@ func NewVM(sockPath string) (*VM, error) {
 		log.Printf("Error starting firecracker: %v", err)
 		return nil, err
 	}
-	errCh := make(chan error, 1)
+	done := make(chan struct{})
+	v := &VM{
+		Cmd:      cmd,
+		SockPath: sockPath,
+		client:   client,
+		done:     done,
+		exitErr:  nil,
+	}
 	go func() {
 		err := cmd.Wait()
-		errCh <- err
+		v.exitErr = err
+		close(done)
 	}()
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
@@ -56,20 +66,13 @@ outer:
 			if _, err := os.Stat(sockPath); err == nil {
 				break outer
 			}
-		case err := <-errCh:
-			log.Printf("Error connecting to socket: %v", err)
-			return nil, err
+		case <-done:
+			log.Printf("Error connecting to socket: %v", v.exitErr)
+			return nil, v.exitErr
 		}
 	}
 
-	timeout := 5 * time.Second
-	client := NewUDSClient(sockPath, timeout)
-	return &VM{
-		Cmd:      cmd,
-		SockPath: sockPath,
-		client:   client,
-		errCh:    errCh,
-	}, nil
+	return v, nil
 }
 
 func (v *VM) Boot() error {
@@ -175,6 +178,10 @@ func (v *VM) Stop() error {
 	return nil
 }
 
-func (v *VM) Done() <-chan error {
-	return v.errCh
+func (v *VM) Done() <-chan struct{} {
+	return v.done
+}
+
+func (v *VM) ExitErr() error {
+	return v.exitErr
 }

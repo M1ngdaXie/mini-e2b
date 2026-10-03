@@ -32,10 +32,14 @@ out:
 				log.Printf("Error stopping VM : %v", err)
 			}
 			break out
-		case err := <-process.Done():
-			err = process.Stop()
+		case <-process.Done():
+			err = process.ExitErr()
 			if err != nil {
-				log.Printf("Error stopping VM : %v", err)
+				log.Printf("Exit error: %v", err)
+			}
+			stopErr := process.Stop()
+			if stopErr != nil {
+				log.Printf("Error stopping VM : %v", stopErr)
 			}
 			break out
 		}
