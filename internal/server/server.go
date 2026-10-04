@@ -73,7 +73,19 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
+	go func() {
+		<-vm.Done()
+		err := vm.ExitErr()
+		if err != nil {
+			log.Printf("Exit error from handleCreateVm: %v", err)
+		}
+		log.Printf("HandleCreateVm started the stoping process")
+		cleanupErr := vm.Cleanup()
+		if cleanupErr != nil {
+			log.Printf("Error stopping VM : %v", cleanupErr)
+		}
+		s.vms.Remove(vm.SandboxID)
+	}()
 	err = vm.Boot()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -85,18 +97,6 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.vms.Add(vm)
-	go func() {
-		<-vm.Done()
-		err := vm.ExitErr()
-		if err != nil {
-			log.Printf("Exit error: %v", err)
-		}
-		stopErr := vm.Stop()
-		if stopErr != nil {
-			log.Printf("Error stopping VM : %v", stopErr)
-		}
-		s.vms.Remove(vm.SandboxID)
-	}()
 
 	resp := CreateResponse{
 		Id: vm.SandboxID,
@@ -113,13 +113,16 @@ func (s *Server) handleDeleteVm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "VM not found", http.StatusNotFound)
 		return
 	}
+	log.Printf("HandleDeleteVm started the stoping process")
 	err := vm.Stop()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	//wait for Close channel to be closed, then remove the VM from the store
+	<-vm.Done()
 	s.vms.Remove(id)
-	w.Write([]byte("VM deleted"))
+	w.Write([]byte("VM is Really gone"))
 }
 
 // func handleOnlyVmCreate(w http.ResponseWriter, r *http.Request) {

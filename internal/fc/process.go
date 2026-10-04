@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 	"time"
 )
@@ -19,7 +20,7 @@ const (
 	KernelImagePathKey = "/home/mingda/firecracker/vmlinux.bin"
 	BootArgsKey        = "console=ttyS0 reboot=k panic=1 pci=off"
 	DriveIdKey         = "rootfs"
-	PathOnHostKey      = "/home/mingda/firecracker/rootfs.ext4"
+	BaseRootfsPathKey  = "/home/mingda/rootfs.base.ext4"
 	IsRootDeviceKey    = true
 	IsReadOnlyKey      = false
 	VcpuCountKey       = 2
@@ -27,17 +28,23 @@ const (
 )
 
 type VM struct {
-	Cmd       *exec.Cmd
-	SandboxID string
-	SockPath  string
-	client    *http.Client
-	done      chan struct{}
-	exitErr   error
+	Cmd        *exec.Cmd
+	SandboxID  string
+	SockPath   string
+	RootfsPath string
+	client     *http.Client
+	done       chan struct{}
+	exitErr    error
 }
 
 func NewVM() (*VM, error) {
 	id := NewID()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
 	sockPath := fmt.Sprintf("/tmp/fc-%s.sock", id)
+	rootfsPath := filepath.Join(home, "mini-e2b-data", "vms", id)
 	os.Remove(sockPath)
 	cmd := exec.Command("/home/mingda/firecracker/firecracker", "--api-sock", sockPath)
 	timeout := 5 * time.Second
@@ -46,19 +53,20 @@ func NewVM() (*VM, error) {
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 
-	err := cmd.Start()
+	err = cmd.Start()
 	if err != nil {
 		log.Printf("Error starting firecracker: %v", err)
 		return nil, err
 	}
 	done := make(chan struct{})
 	v := &VM{
-		Cmd:       cmd,
-		SandboxID: id,
-		SockPath:  sockPath,
-		client:    client,
-		done:      done,
-		exitErr:   nil,
+		Cmd:        cmd,
+		SandboxID:  id,
+		RootfsPath: rootfsPath,
+		SockPath:   sockPath,
+		client:     client,
+		done:       done,
+		exitErr:    nil,
 	}
 	go func() {
 		err := cmd.Wait()
@@ -106,9 +114,21 @@ func (v *VM) Boot() error {
 	}
 	log.Printf("Boot source set successfully code : %v, hdr : %v", code, hdr)
 	//step two
+	// cp rootfs to v.RootfsPath
+	if err := os.MkdirAll(v.RootfsPath, 0755); err != nil {
+		log.Printf("Error creating rootfs path : %v", err)
+		return err
+	}
+	dest := filepath.Join(v.RootfsPath, "rootfs.ext4")
+	cmd := exec.Command("cp", BaseRootfsPathKey, dest)
+	if err := cmd.Run(); err != nil {
+		log.Printf("Error copying rootfs : %v", err)
+		return err
+	}
+
 	drive := &drive{
 		Drive_id:       DriveIdKey,
-		Path_on_host:   PathOnHostKey,
+		Path_on_host:   dest,
 		Is_root_device: IsRootDeviceKey,
 		Is_read_only:   IsReadOnlyKey,
 	}
@@ -170,7 +190,6 @@ func (v *VM) Boot() error {
 }
 
 func (v *VM) Stop() error {
-	defer os.Remove(v.SockPath)
 	if v.Cmd != nil {
 		err := v.Cmd.Process.Signal(syscall.SIGKILL)
 		if errors.Is(err, os.ErrProcessDone) {
@@ -197,4 +216,18 @@ func NewID() string {
 	b := make([]byte, 16)
 	rand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func (v *VM) Cleanup() error {
+	err := os.Remove(v.SockPath)
+	if err != nil {
+		log.Printf("Error remove sock path : %v", err)
+		return err
+	}
+	err = os.RemoveAll(v.RootfsPath)
+	if err != nil {
+		log.Printf("Error remove rootfs path : %v", err)
+		return err
+	}
+	return nil
 }
