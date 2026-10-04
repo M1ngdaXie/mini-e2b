@@ -1,9 +1,11 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/M1ngdaXie/mini-e2b/internal/fc"
 )
@@ -24,9 +26,11 @@ type CreateResponse struct {
 	Id string `json:"id"`
 }
 type Server struct {
-	Addr    string
-	Handler http.Handler
-	vms     *smap
+	Addr       string
+	Handler    http.Handler
+	vms        *smap
+	httpServer *http.Server
+	wg         *sync.WaitGroup
 }
 
 func NewServer(addr string, handler http.Handler) *Server {
@@ -34,6 +38,11 @@ func NewServer(addr string, handler http.Handler) *Server {
 		Addr:    addr,
 		Handler: handler,
 		vms:     NewSmap(),
+		httpServer: &http.Server{
+			Addr:    addr,
+			Handler: handler,
+		},
+		wg: &sync.WaitGroup{},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
@@ -44,11 +53,12 @@ func NewServer(addr string, handler http.Handler) *Server {
 	mux.HandleFunc("DELETE /vms/{id}", s.handleDeleteVm)
 
 	s.Handler = mux
+	s.httpServer.Handler = s.Handler
 	return s
 }
 
 func (s *Server) Start() error {
-	return http.ListenAndServe("127.0.0.1:"+s.Addr, s.Handler)
+	return s.httpServer.ListenAndServe()
 }
 
 func (s *Server) handleListVms(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +83,9 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		<-vm.Done()
 		err := vm.ExitErr()
 		if err != nil {
@@ -125,13 +137,20 @@ func (s *Server) handleDeleteVm(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("VM is Really gone"))
 }
 
-// func handleOnlyVmCreate(w http.ResponseWriter, r *http.Request) {
-// 	if r.Method == "POST" {
-// 		vm, err := NewVm()
-// 		if err != nil {
-// 			http.Error(w, err.Error(), http.StatusInternalServerError)
-// 			return
-// 		}
-// 		w.Write([]byte(vm.Id))
-// 	}
-// }
+func (s *Server) HandleShutdown(ctx context.Context) error {
+	err := s.httpServer.Shutdown(ctx)
+	if err != nil {
+		log.Printf("Error shutting down HTTP server: %v", err)
+		return err
+	}
+	vmslist := s.vms.List()
+	for _, vm := range vmslist {
+		vm.Stop()
+		<-vm.Done()
+		log.Printf("VM stopped: %v", vm.SandboxID)
+		s.vms.Remove(vm.SandboxID)
+	}
+	log.Printf("Signal sent to all VMs, waiting for WaitGroup to finish")
+	s.wg.Wait()
+	return nil
+}

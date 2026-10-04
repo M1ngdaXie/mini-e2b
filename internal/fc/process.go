@@ -45,17 +45,31 @@ func NewVM() (*VM, error) {
 	}
 	sockPath := fmt.Sprintf("/tmp/fc-%s.sock", id)
 	rootfsPath := filepath.Join(home, "mini-e2b-data", "vms", id)
+	logsPath := filepath.Join(home, "mini-e2b-data", "logs", id)
 	os.Remove(sockPath)
+	os.MkdirAll(logsPath, 0755)
+
+	stdoutFile, err := os.OpenFile(filepath.Join(logsPath, "stdout.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, err
+	}
+	stderrFile, err := os.OpenFile(filepath.Join(logsPath, "stderr.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		stdoutFile.Close()
+		return nil, err
+	}
+
 	cmd := exec.Command("/home/mingda/firecracker/firecracker", "--api-sock", sockPath)
 	timeout := 5 * time.Second
 	client := NewUDSClient(sockPath, timeout)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
+	cmd.Stdout = stdoutFile
+	cmd.Stderr = stderrFile
 
 	err = cmd.Start()
 	if err != nil {
 		log.Printf("Error starting firecracker: %v", err)
+		stdoutFile.Close()
+		stderrFile.Close()
 		return nil, err
 	}
 	done := make(chan struct{})
@@ -71,6 +85,8 @@ func NewVM() (*VM, error) {
 	go func() {
 		err := cmd.Wait()
 		v.exitErr = err
+		stdoutFile.Close()
+		stderrFile.Close()
 		close(done)
 	}()
 	ticker := time.NewTicker(10 * time.Millisecond)
