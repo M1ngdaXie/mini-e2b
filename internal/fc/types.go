@@ -18,3 +18,15 @@ type machine_config struct {
 type action struct {
 	ActionType string `json:"action_type"`
 }
+type State struct {
+	State string `json:"state"`
+}
+
+type SnapshotCreateReq struct {
+	Mem_file_path string `json:"mem_file_path"`
+	Snapshot_path string `json:"snapshot_path"`
+}
+type SnapshotLoadReq struct {
+	Snapshot_path string `json:"snapshot_path"`
+	Mem_file_path string `json:"mem_file_path"`
+}

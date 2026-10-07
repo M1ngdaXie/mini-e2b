@@ -32,6 +32,9 @@ type Server struct {
 	httpServer *http.Server
 	wg         *sync.WaitGroup
 }
+type CreateVmReq struct {
+	SnapshotId string `json:"snapshot_id"`
+}
 
 func NewServer(addr string, handler http.Handler) *Server {
 	s := &Server{
@@ -51,6 +54,9 @@ func NewServer(addr string, handler http.Handler) *Server {
 	mux.HandleFunc("GET /vms", s.handleListVms)
 	mux.HandleFunc("POST /vms", s.handleCreateVm)
 	mux.HandleFunc("DELETE /vms/{id}", s.handleDeleteVm)
+	mux.HandleFunc("PATCH /vms/{id}/state/pause", s.handleVmPause)
+	mux.HandleFunc("PATCH /vms/{id}/state/resume", s.handleVmResume)
+	mux.HandleFunc("PUT /vms/{id}/snapshot/create", s.handleSnapshotCreate)
 
 	s.Handler = mux
 	s.httpServer.Handler = s.Handler
@@ -78,6 +84,12 @@ func (s *Server) handleListVms(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	var req CreateVmReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	vm, err := fc.NewVM()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -98,15 +110,26 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 		}
 		s.vms.Remove(vm.SandboxID)
 	}()
-	err = vm.Boot()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Printf("Error Creating VM, stopping")
-		stopErr := vm.Stop()
-		if stopErr != nil {
-			log.Printf("Error Stopping VM: %v", stopErr)
+	if req.SnapshotId != "" {
+		id := req.SnapshotId
+		err := vm.LoadSnapshot(id)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
-		return
+		log.Printf("Loaded snapshot %s", id)
+	} else {
+		log.Printf("Booting new VM")
+		err = vm.Boot()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("Error Creating VM, stopping")
+			stopErr := vm.Stop()
+			if stopErr != nil {
+				log.Printf("Error Stopping VM: %v", stopErr)
+			}
+			return
+		}
 	}
 	s.vms.Add(vm)
 
@@ -153,4 +176,49 @@ func (s *Server) HandleShutdown(ctx context.Context) error {
 	log.Printf("Signal sent to all VMs, waiting for WaitGroup to finish")
 	s.wg.Wait()
 	return nil
+}
+
+func (s *Server) handleVmPause(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	vm, ok := s.vms.Get(id)
+	if !ok {
+		http.Error(w, "VM not found", http.StatusNotFound)
+		return
+	}
+	err := vm.PauseVm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write([]byte("VM paused"))
+}
+
+func (s *Server) handleVmResume(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	vm, ok := s.vms.Get(id)
+	if !ok {
+		http.Error(w, "VM not found", http.StatusNotFound)
+		return
+	}
+	err := vm.ResumeVm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write([]byte("VM resumed"))
+}
+
+func (s *Server) handleSnapshotCreate(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	vm, ok := s.vms.Get(id)
+	if !ok {
+		http.Error(w, "VM not found", http.StatusNotFound)
+		return
+	}
+	err := vm.CreateSnapshot()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write([]byte("Snapshot created"))
 }
