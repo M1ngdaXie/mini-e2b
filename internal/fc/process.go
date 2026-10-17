@@ -168,8 +168,7 @@ func (v *VM) Boot() error {
 		map[string]string{"Content-Type": "application/json"},
 		b)
 	if err != nil || code != 204 {
-		log.Printf("Error set drive : %v, code : %v, body : %s", err, code, string(body))
-		return err
+		return fmt.Errorf("Error set drive : %v, code : %v, body : %s", err, code, string(body))
 	}
 	log.Printf("Drive set successfully code : %v, hdr : %v", code, hdr)
 	//step three
@@ -188,8 +187,7 @@ func (v *VM) Boot() error {
 		map[string]string{"Content-Type": "application/json"},
 		b)
 	if err != nil || code != 204 {
-		log.Printf("Error set machine config : %v, body : %s", err, string(body))
-		return err
+		return fmt.Errorf("Error set machine config : %v, body : %s", err, string(body))
 	}
 	log.Printf("Machine config set successfully code : %v, hdr : %v", code, hdr)
 	//step four
@@ -207,8 +205,7 @@ func (v *VM) Boot() error {
 		map[string]string{"Content-Type": "application/json"},
 		b)
 	if err != nil || code != 204 {
-		log.Printf("Error set action : %v, body : %s", err, string(body))
-		return err
+		return fmt.Errorf("Error set action : %d, body : %s", code, string(body))
 	}
 	log.Printf("Machine started successfully code : %v, hdr : %v", code, hdr)
 	return nil
@@ -242,8 +239,7 @@ func (v *VM) PauseVm() error {
 		map[string]string{"Content-Type": "application/json"},
 		b)
 	if err != nil || code != 204 {
-		log.Printf("Error Pause VM : %v, body : %s", err, string(body))
-		return err
+		return fmt.Errorf("Error Pause VM : %d, body : %s", code, string(body))
 	}
 	log.Printf("Machine paused successfully code : %v, hdr : %v", code, headers)
 	return nil
@@ -261,8 +257,7 @@ func (v *VM) ResumeVm() error {
 		map[string]string{"Content-Type": "application/json"},
 		b)
 	if err != nil || code != 204 {
-		log.Printf("Error Resume VM : %v, body : %s", err, string(body))
-		return err
+		return fmt.Errorf("Error Resume VM : %d, body : %s", code, string(body))
 	}
 	log.Printf("Machine Resumed successfully code : %v, hdr : %v", code, headers)
 	return nil
@@ -292,8 +287,7 @@ func (v *VM) CreateSnapshot() error {
 		map[string]string{"Content-Type": "application/json"},
 		b)
 	if err != nil || code != 204 {
-		log.Printf("Error Create Snapshot : %v, body : %s", err, string(body))
-		return err
+		return fmt.Errorf("Error Create Snapshot : %d, body : %s", code, string(body))
 	}
 	log.Printf("Snapshot created successfully code : %v, hdr : %v, body : %s", code, headers, string(body))
 	return nil
@@ -308,9 +302,8 @@ func (v *VM) LoadSnapshot(id string) error {
 	}
 	dest := filepath.Join(rootfsPath, "rootfs.ext4")
 	cmd := exec.Command("cp", filepath.Join(memSnapshotPath, "rootfs.ext4"), dest)
-	if err := cmd.Run(); err != nil {
-		log.Printf("Error copying rootfs in : %v", err)
-		return err
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("copy rootfs from snapshot %s: %w (%s)", id, err, output)
 	}
 	v.RootfsPath = rootfsPath
 	req := &SnapshotLoadReq{
@@ -328,8 +321,7 @@ func (v *VM) LoadSnapshot(id string) error {
 		map[string]string{"Content-Type": "application/json"},
 		b)
 	if err != nil || code != 204 {
-		log.Printf("Error Load Snapshot : %v, body : %s", err, string(body))
-		return err
+		return fmt.Errorf("Error Load Snapshot : %d, body : %s", code, string(body))
 	}
 	log.Printf("Snapshot loaded successfully code : %v, hdr : %v, body : %s", code, headers, string(body))
 	return nil

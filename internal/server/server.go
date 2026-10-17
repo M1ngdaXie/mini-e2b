@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/M1ngdaXie/mini-e2b/internal/fc"
@@ -112,12 +113,19 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 	}()
 	if req.SnapshotId != "" {
 		id := req.SnapshotId
+		if _, err := os.Stat("/home/mingda/mini-e2b-data/snapshots/" + id); err != nil {
+			http.Error(w, "Snapshot does not exist", http.StatusNotFound)
+			return
+		}
 		err := vm.LoadSnapshot(id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			err := vm.Stop()
+			if err != nil {
+				log.Printf("Error stopping VM: %v", err)
+			}
 			return
 		}
-		log.Printf("Loaded snapshot %s", id)
 	} else {
 		log.Printf("Booting new VM")
 		err = vm.Boot()
