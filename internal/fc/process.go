@@ -158,7 +158,7 @@ func (v *VM) Boot() error {
 		log.Printf("Error copying rootfs : %v", err)
 		return err
 	}
-
+	os.Chmod(dest, 0644)
 	drive := &drive{
 		Drive_id:       DriveIdKey,
 		Path_on_host:   dest,
