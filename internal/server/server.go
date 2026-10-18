@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/M1ngdaXie/mini-e2b/internal/fc"
 )
@@ -90,12 +91,14 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
+	vmstart := time.Now()
 	vm, err := fc.NewVM()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	elapsed := time.Since(vmstart)
+	log.Printf("It takes %v to create a vm", elapsed)
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -117,6 +120,7 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Snapshot does not exist", http.StatusNotFound)
 			return
 		}
+		loadsnapshot := time.Now()
 		err := vm.LoadSnapshot(id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -126,8 +130,11 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+		elapse := time.Since(loadsnapshot)
+		log.Printf("It takes %v to restore one snapshot of an vm", elapse)
 	} else {
 		log.Printf("Booting new VM")
+		bootvm := time.Now()
 		err = vm.Boot()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -138,6 +145,8 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+		elapsed := time.Since(bootvm)
+		log.Printf("It takes %v to boot a vm", elapsed)
 	}
 	s.vms.Add(vm)
 
