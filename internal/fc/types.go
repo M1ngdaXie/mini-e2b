@@ -30,3 +30,9 @@ type SnapshotLoadReq struct {
 	Snapshot_path string `json:"snapshot_path"`
 	Mem_file_path string `json:"mem_file_path"`
 }
+
+type NetworkInterface struct {
+	Guest_mac     string `json:"guest_mac"`
+	Host_dev_name string `json:"host_dev_name"`
+	Iface_id      string `json:"iface_id"`
+}

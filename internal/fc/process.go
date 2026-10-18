@@ -18,7 +18,7 @@ import (
 const (
 	baseurl            = "http://localhost/"
 	KernelImagePathKey = "/home/mingda/firecracker/vmlinux.bin"
-	BootArgsKey        = "console=ttyS0 reboot=k panic=1 pci=off"
+	BootArgsKey        = "console=ttyS0 reboot=k panic=1 pci=off ip=10.200.0.2::10.200.0.1:255.255.255.0::eth0:off"
 	DriveIdKey         = "rootfs"
 	BaseRootfsPathKey  = "/home/mingda/rootfs.base.ext4"
 	IsRootDeviceKey    = true
@@ -38,6 +38,10 @@ type VM struct {
 	MemSnapshotPath string
 	client          *http.Client
 	done            chan struct{}
+	GuestMac        string
+	Host            string
+	Iface_id        string
+	IP              string
 	exitErr         error
 }
 
@@ -88,6 +92,10 @@ func NewVM() (*VM, error) {
 		SnapShotPath:    snapShotpath,
 		MemSnapshotPath: memSnapshotPath,
 		client:          client,
+		GuestMac:        "06:00:0A:C8:00:02",
+		Host:            "tap0",
+		IP:              "10.200.0.2",
+		Iface_id:        "my_network0",
 		done:            done,
 		exitErr:         nil,
 	}
@@ -190,6 +198,24 @@ func (v *VM) Boot() error {
 		return fmt.Errorf("Error set machine config : %v, body : %s", err, string(body))
 	}
 	log.Printf("Machine config set successfully code : %v, hdr : %v", code, hdr)
+	ninterface := &NetworkInterface{
+		Guest_mac:     v.GuestMac,
+		Host_dev_name: v.Host,
+		Iface_id:      v.Iface_id,
+	}
+	b, err = json.Marshal(ninterface)
+	if err != nil {
+		log.Printf("Error marshal network config : %v", err)
+		return err
+	}
+	code, hdr, body, err = UDSRequest(v.client,
+		"PUT",
+		baseurl+"network-interfaces/"+v.Iface_id,
+		map[string]string{"Content-Type": "application/json"},
+		b)
+	if err != nil || code != 204 {
+		return fmt.Errorf("Error set network interface : %v, body : %s", err, string(body))
+	}
 	//step four
 	action := &action{
 		ActionType: "InstanceStart",
