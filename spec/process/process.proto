@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package process;
+
+option go_package = "github.com/M1ngdaXie/mini-e2b/gen/spec/process;process";
+
+service Process {
+    rpc Start(CommandRequest) returns (stream CommandResponse);
+}
+
+message CommandRequest {
+    string command = 1;
+}
+message CommandResponse {
+    oneof output {
+        bytes stdout = 1;
+        bytes stderr = 2;
+        int32 exitcode = 3;
+    }
+}

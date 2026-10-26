@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,10 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"connectrpc.com/connect"
+	"github.com/M1ngdaXie/mini-e2b/gen/spec/process"
+	"github.com/M1ngdaXie/mini-e2b/gen/spec/process/processconnect"
 )
 
 const (
@@ -85,7 +90,7 @@ func main() {
 	messages = append(messages, firstMessage)
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
-		fmt.Print("> ")
+		fmt.Print("-> ")
 		scanner.Scan()
 		line := scanner.Text()
 		userMessage := Message{
@@ -183,34 +188,49 @@ func ChatRequest(req *ChatReq) (*ChatResponse, error) {
 	return &result, nil
 }
 func runCommandsInFc(command string) (string, error) {
-
-	req, err := http.NewRequest("POST", ExecUrl, strings.NewReader(command))
-	if err != nil {
+	var rawCmd struct {
+		Command string `json:"command"`
+	}
+	if err := json.NewDecoder(strings.NewReader(command)).Decode(&rawCmd); err != nil {
+		log.Printf("Error decoding Raw command")
 		return "", err
 	}
-
-	resp, err := client.Do(req)
+	client := processconnect.NewProcessClient(http.DefaultClient, "http://10.200.0.2:43838")
+	stream, err := client.Start(context.Background(), connect.NewRequest(&process.CommandRequest{Command: rawCmd.Command}))
 	if err != nil {
+		log.Printf("Error Starting streams command %v", err)
 		return "", err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		b, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("exec service returned %d: %s", resp.StatusCode, b)
+	var stdout, stderr strings.Builder
+	exitCode := -1
+	for stream.Receive() {
+		switch v := stream.Msg().Output.(type) {
+		case *process.CommandResponse_Exitcode:
+			exitCode = int(v.Exitcode)
+		case *process.CommandResponse_Stderr:
+			stderr.WriteString(string(v.Stderr))
+		case *process.CommandResponse_Stdout:
+			stdout.WriteString(string(v.Stdout))
+			stdout.WriteString("\n")
+		}
 	}
-
-	var cr struct {
+	if err := stream.Err(); err != nil {
+		return "", err
+	}
+	defer stream.Close()
+	type CommandResponse struct {
 		Stdout   string `json:"stdout"`
 		Stderr   string `json:"stderr"`
 		ExitCode int    `json:"exitcode"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
-		return "", err
+	response := &CommandResponse{
+		Stdout:   stdout.String(),
+		Stderr:   stderr.String(),
+		ExitCode: exitCode,
 	}
-
-	out, err := json.Marshal(cr)
+	out, err := json.Marshal(response)
 	if err != nil {
+		log.Printf("Error Encoding reponse for agent %v", err)
 		return "", err
 	}
 	return string(out), nil

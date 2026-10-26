@@ -20,6 +20,7 @@ func main() {
 			log.Fatalf("Server error: %v", err)
 		}
 	}()
+
 	exitChan := make(chan os.Signal, 1)
 	signal.Notify(exitChan, os.Interrupt, syscall.SIGTERM)
 	<-exitChan
