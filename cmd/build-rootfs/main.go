@@ -24,8 +24,8 @@ WantedBy=multi-user.target
 `
 
 func main() {
-	rootfs := flag.String("rootfs", "/home/mingda/rootfs.base.ext4", "rootfs image to modify")
-	envd := flag.String("envd", "/home/mingda/mini-e2b/envd", "envd binary to install")
+	rootfs := flag.String("rootfs", "/home/mingdaxie/rootfs.base.ext4", "rootfs image to modify")
+	envd := flag.String("envd", "/home/mingdaxie/mini-e2b/envd", "envd binary to install")
 	flag.Parse()
 
 	if err := run(*rootfs, *envd); err != nil {

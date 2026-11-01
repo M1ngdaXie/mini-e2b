@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/M1ngdaXie/mini-e2b/internal/config"
 	"github.com/M1ngdaXie/mini-e2b/internal/fc"
 )
 
@@ -33,12 +34,13 @@ type Server struct {
 	vms        *smap
 	httpServer *http.Server
 	wg         *sync.WaitGroup
+	cfg        config.Config
 }
 type CreateVmReq struct {
 	SnapshotId string `json:"snapshot_id"`
 }
 
-func NewServer(addr string, handler http.Handler) *Server {
+func NewServer(addr string, handler http.Handler, cfg config.Config) *Server {
 	s := &Server{
 		Addr:    addr,
 		Handler: handler,
@@ -47,7 +49,8 @@ func NewServer(addr string, handler http.Handler) *Server {
 			Addr:    addr,
 			Handler: handler,
 		},
-		wg: &sync.WaitGroup{},
+		wg:  &sync.WaitGroup{},
+		cfg: cfg,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
@@ -92,7 +95,7 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	vmstart := time.Now()
-	vm, err := fc.NewVM()
+	vm, err := fc.NewVM(s.cfg)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -116,7 +119,7 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 	}()
 	if req.SnapshotId != "" {
 		id := req.SnapshotId
-		if _, err := os.Stat("/home/mingda/mini-e2b-data/snapshots/" + id); err != nil {
+		if _, err := os.Stat(s.cfg.SnapshotDir + id); err != nil {
 			http.Error(w, "Snapshot does not exist", http.StatusNotFound)
 			return
 		}
@@ -135,7 +138,7 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 	} else {
 		log.Printf("Booting new VM")
 		bootvm := time.Now()
-		err = vm.Boot()
+		err = vm.Boot(s.cfg)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			log.Printf("Error Creating VM, stopping")

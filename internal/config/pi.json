@@ -1,0 +1,7 @@
+{
+  "firecrackerBin": "/home/mingdaxie/fc/firecracker",
+  "kernelPath":"/home/mingdaxie/fc/vmlinux-6.1.bin",
+  "baseRootfsPath":"/home/mingdaxie/rootfs.base.ext4",
+  "envdPath":"/home/mingdaxie/mini-e2b/envd",
+  "snapshotDir":"/home/mingdaxie/mini-e2b-data/snapshots/"
+}

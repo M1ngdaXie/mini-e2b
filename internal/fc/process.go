@@ -13,18 +13,18 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/M1ngdaXie/mini-e2b/internal/config"
 )
 
 const (
-	baseurl            = "http://localhost/"
-	KernelImagePathKey = "/home/mingda/firecracker/vmlinux.bin"
-	BootArgsKey        = "console=ttyS0 reboot=k panic=1 pci=off ip=10.200.0.2::10.200.0.1:255.255.255.0::eth0:off"
-	DriveIdKey         = "rootfs"
-	BaseRootfsPathKey  = "/home/mingda/rootfs.base.ext4"
-	IsRootDeviceKey    = true
-	IsReadOnlyKey      = false
-	VcpuCountKey       = 2
-	MemoryMibKey       = 256
+	baseurl         = "http://localhost/"
+	BootArgsKey     = "console=ttyS0 reboot=k panic=1 pci=off ip=10.200.0.2::10.200.0.1:255.255.255.0::eth0:off"
+	DriveIdKey      = "rootfs"
+	IsRootDeviceKey = true
+	IsReadOnlyKey   = false
+	VcpuCountKey    = 2
+	MemoryMibKey    = 256
 )
 
 var homeDir string
@@ -45,7 +45,7 @@ type VM struct {
 	exitErr         error
 }
 
-func NewVM() (*VM, error) {
+func NewVM(cfg config.Config) (*VM, error) {
 	id := NewID()
 	home, err := os.UserHomeDir()
 	homeDir = home
@@ -55,8 +55,8 @@ func NewVM() (*VM, error) {
 	sockPath := fmt.Sprintf("/tmp/fc-%s.sock", id)
 	rootfsPath := filepath.Join(home, "mini-e2b-data", "vms", id)
 	logsPath := filepath.Join(home, "mini-e2b-data", "logs", id)
-	snapShotpath := filepath.Join(home, "mini-e2b-data", "snapshots", id)
-	memSnapshotPath := filepath.Join(home, "mini-e2b-data", "snapshots", id)
+	snapShotpath := filepath.Join(cfg.SnapshotDir, id)
+	memSnapshotPath := filepath.Join(cfg.SnapshotDir, id)
 	os.Remove(sockPath)
 	os.MkdirAll(logsPath, 0755)
 
@@ -70,7 +70,7 @@ func NewVM() (*VM, error) {
 		return nil, err
 	}
 
-	cmd := exec.Command("/home/mingda/firecracker/firecracker", "--api-sock", sockPath)
+	cmd := exec.Command(cfg.FirecrackerBin, "--api-sock", sockPath)
 	timeout := 5 * time.Second
 	client := NewUDSClient(sockPath, timeout)
 	cmd.Stdout = stdoutFile
@@ -124,9 +124,9 @@ outer:
 	return v, nil
 }
 
-func (v *VM) Boot() error {
+func (v *VM) Boot(cfg config.Config) error {
 	bootSource := &boot_source{
-		Kernel_image_path: KernelImagePathKey,
+		Kernel_image_path: cfg.KernelPath,
 		Boot_args:         BootArgsKey,
 	}
 	b, err := json.Marshal(bootSource)
@@ -153,7 +153,7 @@ func (v *VM) Boot() error {
 		return err
 	}
 	dest := filepath.Join(v.RootfsPath, "rootfs.ext4")
-	cmd := exec.Command("cp", BaseRootfsPathKey, dest)
+	cmd := exec.Command("cp", cfg.BaseRootfsPath, dest)
 	if err := cmd.Run(); err != nil {
 		log.Printf("Error copying rootfs : %v", err)
 		return err
@@ -313,7 +313,7 @@ func (v *VM) CreateSnapshot() error {
 		map[string]string{"Content-Type": "application/json"},
 		b)
 	if err != nil || code != 204 {
-		return fmt.Errorf("Error Create Snapshot : %d, body : %s", code, string(body))
+		return fmt.Errorf("Error Create Snapshot : %d, body : %s, err : %w ", code, string(body), err)
 	}
 	log.Printf("Snapshot created successfully code : %v, hdr : %v, body : %s", code, headers, string(body))
 	return nil

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"net/http"
 	"os"
@@ -9,11 +10,18 @@ import (
 	"syscall"
 	"time"
 
+	cfg "github.com/M1ngdaXie/mini-e2b/internal/config"
 	"github.com/M1ngdaXie/mini-e2b/internal/server"
 )
 
 func main() {
-	s := server.NewServer("127.0.0.1:9999", nil)
+	config := flag.String("config", "config.json", "load config")
+	flag.Parse()
+	curCfg, err := cfg.Load(*config)
+	if err != nil {
+		log.Fatalf("Error : %v ", err)
+	}
+	s := server.NewServer("127.0.0.1:9999", nil, *curCfg)
 	log.Println("Server started")
 	go func() {
 		if err := s.Start(); err != nil && err != http.ErrServerClosed {
@@ -26,7 +34,7 @@ func main() {
 	<-exitChan
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	err := s.HandleShutdown(ctx)
+	err = s.HandleShutdown(ctx)
 	if err != nil {
 		log.Fatalf("Shutdown error: %v", err)
 	}
