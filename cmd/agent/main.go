@@ -135,6 +135,7 @@ func main() {
 					if err != nil {
 						log.Printf("Error agent running command: %v", err)
 					}
+
 					log.Printf("Deepseek 看到的结果：%s", output)
 					toolMessage := Message{
 						Role:       "tool",
@@ -227,6 +228,10 @@ func runCommandsInFc(command string) (string, error) {
 		Stdout:   stdout.String(),
 		Stderr:   stderr.String(),
 		ExitCode: exitCode,
+	}
+	n := 1500
+	if len(response.Stdout) > 4000 {
+		response.Stdout = fmt.Sprintf("%s 输出过长，省略了%d字符 %s", response.Stdout[:n], len(response.Stdout)-2*n, response.Stdout[len(response.Stdout)-n:])
 	}
 	out, err := json.Marshal(response)
 	if err != nil {
