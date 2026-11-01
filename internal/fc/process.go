@@ -1,6 +1,7 @@
 package fc
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -71,7 +72,7 @@ func NewVM(cfg config.Config) (*VM, error) {
 	}
 
 	cmd := exec.Command(cfg.FirecrackerBin, "--api-sock", sockPath)
-	timeout := 5 * time.Second
+	timeout := 2 * time.Minute
 	client := NewUDSClient(sockPath, timeout)
 	cmd.Stdout = stdoutFile
 	cmd.Stderr = stderrFile
@@ -124,7 +125,7 @@ outer:
 	return v, nil
 }
 
-func (v *VM) Boot(cfg config.Config) error {
+func (v *VM) Boot(ctx context.Context, cfg config.Config) error {
 	bootSource := &boot_source{
 		Kernel_image_path: cfg.KernelPath,
 		Boot_args:         BootArgsKey,
@@ -135,8 +136,9 @@ func (v *VM) Boot(cfg config.Config) error {
 		return err
 	}
 	log.Printf("Marshaled boot source : %s", b)
+
 	var body []byte
-	code, hdr, body, err := UDSRequest(v.client,
+	code, hdr, body, err := UDSRequest(ctx, v.client,
 		"PUT",
 		baseurl+"boot-source",
 		map[string]string{"Content-Type": "application/json"},
@@ -170,7 +172,7 @@ func (v *VM) Boot(cfg config.Config) error {
 		log.Printf("Error marshal drive : %v", err)
 		return err
 	}
-	code, hdr, body, err = UDSRequest(v.client,
+	code, hdr, body, err = UDSRequest(ctx, v.client,
 		"PUT",
 		baseurl+"drives/rootfs",
 		map[string]string{"Content-Type": "application/json"},
@@ -189,7 +191,7 @@ func (v *VM) Boot(cfg config.Config) error {
 		log.Printf("Error marshal machine config : %v", err)
 		return err
 	}
-	code, hdr, body, err = UDSRequest(v.client,
+	code, hdr, body, err = UDSRequest(ctx, v.client,
 		"PUT",
 		baseurl+"machine-config",
 		map[string]string{"Content-Type": "application/json"},
@@ -208,7 +210,7 @@ func (v *VM) Boot(cfg config.Config) error {
 		log.Printf("Error marshal network config : %v", err)
 		return err
 	}
-	code, hdr, body, err = UDSRequest(v.client,
+	code, hdr, body, err = UDSRequest(ctx, v.client,
 		"PUT",
 		baseurl+"network-interfaces/"+v.Iface_id,
 		map[string]string{"Content-Type": "application/json"},
@@ -225,7 +227,7 @@ func (v *VM) Boot(cfg config.Config) error {
 		log.Printf("Error marshal action : %v", err)
 		return err
 	}
-	code, hdr, body, err = UDSRequest(v.client,
+	code, hdr, body, err = UDSRequest(ctx, v.client,
 		"PUT",
 		baseurl+"actions",
 		map[string]string{"Content-Type": "application/json"},
@@ -252,14 +254,14 @@ func (v *VM) Stop() error {
 
 	return nil
 }
-func (v *VM) PauseVm() error {
+func (v *VM) PauseVm(ctx context.Context) error {
 	state := &State{State: "Paused"}
 	b, err := json.Marshal(state)
 	if err != nil {
 		log.Printf("Error marshal state : %v", err)
 		return err
 	}
-	code, headers, body, err := UDSRequest(v.client,
+	code, headers, body, err := UDSRequest(ctx, v.client,
 		"PATCH",
 		baseurl+"vm",
 		map[string]string{"Content-Type": "application/json"},
@@ -270,14 +272,14 @@ func (v *VM) PauseVm() error {
 	log.Printf("Machine paused successfully code : %v, hdr : %v", code, headers)
 	return nil
 }
-func (v *VM) ResumeVm() error {
+func (v *VM) ResumeVm(ctx context.Context) error {
 	state := &State{State: "Resumed"}
 	b, err := json.Marshal(state)
 	if err != nil {
 		log.Printf("Error marshal state : %v", err)
 		return err
 	}
-	code, headers, body, err := UDSRequest(v.client,
+	code, headers, body, err := UDSRequest(ctx, v.client,
 		"PATCH",
 		baseurl+"vm",
 		map[string]string{"Content-Type": "application/json"},
@@ -288,7 +290,7 @@ func (v *VM) ResumeVm() error {
 	log.Printf("Machine Resumed successfully code : %v, hdr : %v", code, headers)
 	return nil
 }
-func (v *VM) CreateSnapshot() error {
+func (v *VM) CreateSnapshot(ctx context.Context) error {
 	if err := os.MkdirAll(v.SnapShotPath, 0755); err != nil {
 		log.Printf("Error create snapshot path : %v", err)
 		return err
@@ -307,7 +309,7 @@ func (v *VM) CreateSnapshot() error {
 		log.Printf("Error marshal snapshot request : %v", err)
 		return err
 	}
-	code, headers, body, err := UDSRequest(v.client,
+	code, headers, body, err := UDSRequest(ctx, v.client,
 		"PUT",
 		baseurl+"snapshot/create",
 		map[string]string{"Content-Type": "application/json"},
@@ -318,7 +320,7 @@ func (v *VM) CreateSnapshot() error {
 	log.Printf("Snapshot created successfully code : %v, hdr : %v, body : %s", code, headers, string(body))
 	return nil
 }
-func (v *VM) LoadSnapshot(id string) error {
+func (v *VM) LoadSnapshot(ctx context.Context, id string) error {
 	memSnapshotPath := filepath.Join(homeDir, "mini-e2b-data", "snapshots", id)
 	rootfsPath := filepath.Join(homeDir, "mini-e2b-data", "vms", id)
 	log.Printf("SnapshotPath is %s", memSnapshotPath)
@@ -341,7 +343,7 @@ func (v *VM) LoadSnapshot(id string) error {
 		log.Printf("Error marshal snapshot request : %v", err)
 		return err
 	}
-	code, headers, body, err := UDSRequest(v.client,
+	code, headers, body, err := UDSRequest(ctx, v.client,
 		"PUT",
 		baseurl+"snapshot/load",
 		map[string]string{"Content-Type": "application/json"},

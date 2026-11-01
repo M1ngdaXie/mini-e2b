@@ -21,6 +21,14 @@ PATCH  /vms/{id}/state         暂停 / 恢复
 POST   /vms/{id}/snapshots     打快照
 DELETE /vms/{id}               停止
 */
+
+// 每种操作最多等多久，统一在这里定，fc 包只负责把 ctx 往下传
+const (
+	bootTimeout     = 10 * time.Second
+	snapshotTimeout = 60 * time.Second
+	stateTimeout    = 5 * time.Second
+)
+
 type ListResponse struct {
 	Id    string `json:"id"`
 	State string `json:"state"`
@@ -124,7 +132,9 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		loadsnapshot := time.Now()
-		err := vm.LoadSnapshot(id)
+		ctx, cancel := context.WithTimeout(r.Context(), snapshotTimeout)
+		defer cancel()
+		err := vm.LoadSnapshot(ctx, id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			err := vm.Stop()
@@ -138,7 +148,9 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 	} else {
 		log.Printf("Booting new VM")
 		bootvm := time.Now()
-		err = vm.Boot(s.cfg)
+		ctx, cancel := context.WithTimeout(r.Context(), bootTimeout)
+		defer cancel()
+		err = vm.Boot(ctx, s.cfg)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			log.Printf("Error Creating VM, stopping")
@@ -205,7 +217,9 @@ func (s *Server) handleVmPause(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "VM not found", http.StatusNotFound)
 		return
 	}
-	err := vm.PauseVm()
+	ctx, cancel := context.WithTimeout(r.Context(), stateTimeout)
+	defer cancel()
+	err := vm.PauseVm(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -220,7 +234,9 @@ func (s *Server) handleVmResume(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "VM not found", http.StatusNotFound)
 		return
 	}
-	err := vm.ResumeVm()
+	ctx, cancel := context.WithTimeout(r.Context(), stateTimeout)
+	defer cancel()
+	err := vm.ResumeVm(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -235,7 +251,9 @@ func (s *Server) handleSnapshotCreate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "VM not found", http.StatusNotFound)
 		return
 	}
-	err := vm.CreateSnapshot()
+	ctx, cancel := context.WithTimeout(r.Context(), snapshotTimeout)
+	defer cancel()
+	err := vm.CreateSnapshot(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

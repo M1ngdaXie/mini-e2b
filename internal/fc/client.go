@@ -21,9 +21,9 @@ func NewUDSClient(sockPath string, timeout time.Duration) *http.Client {
 	}
 }
 
-func UDSRequest(client *http.Client, method, url string, headers map[string]string, body []byte) (int, http.Header, []byte, error) {
+func UDSRequest(ctx context.Context, client *http.Client, method, url string, headers map[string]string, body []byte) (int, http.Header, []byte, error) {
 
-	req, err := http.NewRequest(method, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
 	if err != nil {
 		return 0, nil, nil, err
 	}
