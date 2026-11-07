@@ -37,7 +37,7 @@ func main() {
 func StartWithImage(imageLink string, timeout time.Duration, name string) (*RunResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "podman", "run", "-d", "--name", name, imageLink, "sleep", "infinity")
+	cmd := exec.CommandContext(ctx, "docker", "run", "-d", "--name", name, imageLink, "sleep", "infinity")
 	output, err := cmd.CombinedOutput()
 	defer StopPod(name)
 	if err != nil {
@@ -53,7 +53,7 @@ func StartWithImage(imageLink string, timeout time.Duration, name string) (*RunR
 func RunCommands(inputs string, name string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "podman", "exec", name, "sh", "-c", inputs)
+	cmd := exec.CommandContext(ctx, "docker", "exec", name, "sh", "-c", inputs)
 
 	output, err := cmd.CombinedOutput()
 
@@ -65,7 +65,7 @@ func RunCommands(inputs string, name string) (string, error) {
 }
 
 func StopPod(name string) {
-	cmd := exec.Command("podman", "rm", "-f", name)
+	cmd := exec.Command("docker", "rm", "-f", name)
 	err := cmd.Run()
 	if err != nil {
 		log.Printf("Error stoping pod : %s : %v", name, err)
