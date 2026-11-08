@@ -29,6 +29,8 @@ const (
 	stateTimeout    = 5 * time.Second
 )
 
+var globalIndex = 0
+
 type ListResponse struct {
 	Id    string `json:"id"`
 	State string `json:"state"`
@@ -37,12 +39,13 @@ type CreateResponse struct {
 	Id string `json:"id"`
 }
 type Server struct {
-	Addr       string
-	Handler    http.Handler
-	vms        *smap
-	httpServer *http.Server
-	wg         *sync.WaitGroup
-	cfg        config.Config
+	Addr        string
+	Handler     http.Handler
+	vms         *smap
+	httpServer  *http.Server
+	wg          *sync.WaitGroup
+	cfg         config.Config
+	globalIndex int
 }
 type CreateVmReq struct {
 	SnapshotId string `json:"snapshot_id"`
@@ -57,8 +60,9 @@ func NewServer(addr string, handler http.Handler, cfg config.Config) *Server {
 			Addr:    addr,
 			Handler: handler,
 		},
-		wg:  &sync.WaitGroup{},
-		cfg: cfg,
+		wg:          &sync.WaitGroup{},
+		cfg:         cfg,
+		globalIndex: 0,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +107,8 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	vmstart := time.Now()
-	vm, err := fc.NewVM(s.cfg)
+	vm, err := fc.NewVM(s.cfg, globalIndex)
+	globalIndex += 1
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

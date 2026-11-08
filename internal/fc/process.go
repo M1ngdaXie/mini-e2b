@@ -20,7 +20,6 @@ import (
 
 const (
 	baseurl         = "http://localhost/"
-	BootArgsKey     = "console=ttyS0 reboot=k panic=1 pci=off ip=10.200.0.2::10.200.0.1:255.255.255.0::eth0:off"
 	DriveIdKey      = "rootfs"
 	IsRootDeviceKey = true
 	IsReadOnlyKey   = false
@@ -46,7 +45,7 @@ type VM struct {
 	exitErr         error
 }
 
-func NewVM(cfg config.Config) (*VM, error) {
+func NewVM(cfg config.Config, index int) (*VM, error) {
 	id := NewID()
 	home, err := os.UserHomeDir()
 	homeDir = home
@@ -58,6 +57,9 @@ func NewVM(cfg config.Config) (*VM, error) {
 	logsPath := filepath.Join(home, "mini-e2b-data", "logs", id)
 	snapShotpath := filepath.Join(cfg.SnapshotDir, id)
 	memSnapshotPath := filepath.Join(cfg.SnapshotDir, id)
+	ip := fmt.Sprintf("10.200.0.%d", index+2)
+	macaddr := fmt.Sprintf("06:00:0A:C8:00:%02x", index+2)
+	host := fmt.Sprintf("tap%d", index)
 	os.Remove(sockPath)
 	os.MkdirAll(logsPath, 0755)
 
@@ -93,9 +95,9 @@ func NewVM(cfg config.Config) (*VM, error) {
 		SnapShotPath:    snapShotpath,
 		MemSnapshotPath: memSnapshotPath,
 		client:          client,
-		GuestMac:        "06:00:0A:C8:00:02",
-		Host:            "tap0",
-		IP:              "10.200.0.2",
+		GuestMac:        macaddr,
+		Host:            host,
+		IP:              ip,
 		Iface_id:        "my_network0",
 		done:            done,
 		exitErr:         nil,
@@ -126,6 +128,8 @@ outer:
 }
 
 func (v *VM) Boot(ctx context.Context, cfg config.Config) error {
+	BootArgsKey := fmt.Sprintf("console=ttyS0 reboot=k panic=1 pci=off ip=%s::10.200.0.1:255.255.255.0::eth0:off", v.IP)
+
 	bootSource := &boot_source{
 		Kernel_image_path: cfg.KernelPath,
 		Boot_args:         BootArgsKey,

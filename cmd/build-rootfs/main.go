@@ -87,7 +87,10 @@ func run(rootfs, envd string) error {
 	if err := os.Symlink("/etc/systemd/system/envd.service", link); err != nil {
 		return fmt.Errorf("enable unit: %w", err)
 	}
-
+	fcnet := filepath.Join(mnt, "/etc/systemd/system/sysinit.target.wants/fcnet.service")
+	if err := os.Remove(fcnet); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove fcnet : %w", err)
+	}
 	return nil
 }
 
