@@ -1,9 +1,12 @@
 package network
 
 import (
+	"errors"
 	"fmt"
 	"log"
 )
+
+var ErrPoolEmpty = errors.New("pool is empty")
 
 type Pool struct {
 	poolChan chan int
@@ -24,7 +27,7 @@ func (p *Pool) Acquire() (int, error) {
 	case ip := <-p.poolChan:
 		return ip, nil
 	default:
-		return -1, fmt.Errorf("Pool is Empty, try again later")
+		return -1, ErrPoolEmpty
 	}
 }
 

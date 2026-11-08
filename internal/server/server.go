@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/M1ngdaXie/mini-e2b/internal/config"
 	"github.com/M1ngdaXie/mini-e2b/internal/fc"
+	"github.com/M1ngdaXie/mini-e2b/internal/network"
 )
 
 /*
@@ -39,20 +41,20 @@ type CreateResponse struct {
 	Id string `json:"id"`
 }
 type Server struct {
-	Addr        string
-	Handler     http.Handler
-	vms         *smap
-	httpServer  *http.Server
-	wg          *sync.WaitGroup
-	cfg         config.Config
-	indexMu     sync.Mutex
-	globalIndex int
+	Addr       string
+	Handler    http.Handler
+	vms        *smap
+	httpServer *http.Server
+	wg         *sync.WaitGroup
+	cfg        config.Config
+	pool       *network.Pool
 }
 type CreateVmReq struct {
 	SnapshotId string `json:"snapshot_id"`
 }
 
 func NewServer(addr string, handler http.Handler, cfg config.Config) *Server {
+	p := network.NewPool(2)
 	s := &Server{
 		Addr:    addr,
 		Handler: handler,
@@ -61,9 +63,9 @@ func NewServer(addr string, handler http.Handler, cfg config.Config) *Server {
 			Addr:    addr,
 			Handler: handler,
 		},
-		wg:          &sync.WaitGroup{},
-		cfg:         cfg,
-		globalIndex: 0,
+		wg:   &sync.WaitGroup{},
+		cfg:  cfg,
+		pool: p,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
@@ -108,11 +110,16 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	vmstart := time.Now()
-	s.indexMu.Lock()
-	localIndex := s.globalIndex
-	s.globalIndex += 1
-	s.indexMu.Unlock()
-	vm, err := fc.NewVM(s.cfg, localIndex)
+	index, err := s.pool.Acquire()
+	if err != nil {
+		if errors.Is(err, network.ErrPoolEmpty) {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	vm, err := fc.NewVM(s.cfg, index)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -123,6 +130,13 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
+		defer func() {
+			if err := s.pool.Release(index); err != nil {
+				log.Printf("error from releasing the index : %v", err)
+				return
+			}
+			log.Printf("Index release sucess index : %d", index)
+		}()
 		<-vm.Done()
 		err := vm.ExitErr()
 		if err != nil {

@@ -203,7 +203,7 @@ func (v *VM) Boot(ctx context.Context, cfg config.Config) error {
 	if err != nil || code != 204 {
 		return fmt.Errorf("Error set machine config : %v, body : %s", err, string(body))
 	}
-	log.Printf("Machine config set successfully code : %v, hdr : %v", code, hdr)
+	log.Printf("Machine config set successfully code : %d, hdr : %v", code, hdr)
 	ninterface := &NetworkInterface{
 		Guest_mac:     v.GuestMac,
 		Host_dev_name: v.Host,
@@ -220,7 +220,7 @@ func (v *VM) Boot(ctx context.Context, cfg config.Config) error {
 		map[string]string{"Content-Type": "application/json"},
 		b)
 	if err != nil || code != 204 {
-		return fmt.Errorf("Error set network interface : %v, body : %s", err, string(body))
+		return fmt.Errorf("Error set network interface : %d, body : %s", code, string(body))
 	}
 	//step four
 	action := &action{
