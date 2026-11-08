@@ -22,6 +22,7 @@ func main() {
 		log.Fatalf("Error : %v ", err)
 	}
 	s := server.NewServer("127.0.0.1:9999", nil, *curCfg)
+
 	log.Println("Server started")
 	go func() {
 		if err := s.Start(); err != nil && err != http.ErrServerClosed {

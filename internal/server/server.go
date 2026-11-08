@@ -45,6 +45,7 @@ type Server struct {
 	httpServer  *http.Server
 	wg          *sync.WaitGroup
 	cfg         config.Config
+	indexMu     sync.Mutex
 	globalIndex int
 }
 type CreateVmReq struct {
@@ -107,8 +108,12 @@ func (s *Server) handleCreateVm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	vmstart := time.Now()
-	vm, err := fc.NewVM(s.cfg, globalIndex)
-	globalIndex += 1
+	s.indexMu.Lock()
+	localIndex := s.globalIndex
+	s.globalIndex += 1
+	s.indexMu.Unlock()
+	vm, err := fc.NewVM(s.cfg, localIndex)
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
