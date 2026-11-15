@@ -11,17 +11,23 @@ import (
 	"time"
 
 	cfg "github.com/M1ngdaXie/mini-e2b/internal/config"
+	"github.com/M1ngdaXie/mini-e2b/internal/network"
 	"github.com/M1ngdaXie/mini-e2b/internal/server"
 )
 
 func main() {
 	config := flag.String("config", "config.json", "load config")
+	poolNumber := flag.Int("poolnumber", 2, "number of ip in pool")
 	flag.Parse()
 	curCfg, err := cfg.Load(*config)
 	if err != nil {
 		log.Fatalf("Error : %v ", err)
 	}
-	s := server.NewServer("127.0.0.1:9999", nil, *curCfg)
+	if err := network.Setup("br0", "10.200.0.1/24", *poolNumber); err != nil {
+		log.Fatalf("Error Setting up network Environment %v", err)
+
+	}
+	s := server.NewServer("127.0.0.1:9999", nil, *curCfg, *poolNumber)
 
 	log.Println("Server started")
 	go func() {

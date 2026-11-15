@@ -53,8 +53,8 @@ type CreateVmReq struct {
 	SnapshotId string `json:"snapshot_id"`
 }
 
-func NewServer(addr string, handler http.Handler, cfg config.Config) *Server {
-	p := network.NewPool(2)
+func NewServer(addr string, handler http.Handler, cfg config.Config, poolNumber int) *Server {
+	p := network.NewPool(poolNumber)
 	s := &Server{
 		Addr:    addr,
 		Handler: handler,
