@@ -54,7 +54,7 @@ type CreateVmReq struct {
 }
 
 func NewServer(addr string, handler http.Handler, cfg config.Config, poolNumber int) *Server {
-	p := network.NewPool(poolNumber)
+	pool := network.NewPool(poolNumber)
 	s := &Server{
 		Addr:    addr,
 		Handler: handler,
@@ -65,8 +65,15 @@ func NewServer(addr string, handler http.Handler, cfg config.Config, poolNumber 
 		},
 		wg:   &sync.WaitGroup{},
 		cfg:  cfg,
-		pool: p,
+		pool: pool,
 	}
+	// proxy, err := proxy.NewProxy(func(id string) (ip string, ok bool) {
+	// 	vm, ok := s.vms.Get(id)
+	// 	if !ok {
+	// 		return "", false
+	// 	}
+	// 	return vm.IP, true
+	// })
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("pong"))
