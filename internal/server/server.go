@@ -13,6 +13,7 @@ import (
 	"github.com/M1ngdaXie/mini-e2b/internal/config"
 	"github.com/M1ngdaXie/mini-e2b/internal/fc"
 	"github.com/M1ngdaXie/mini-e2b/internal/network"
+	"github.com/M1ngdaXie/mini-e2b/internal/proxy"
 )
 
 /*
@@ -67,14 +68,19 @@ func NewServer(addr string, handler http.Handler, cfg config.Config, poolNumber 
 		cfg:  cfg,
 		pool: pool,
 	}
-	// proxy, err := proxy.NewProxy(func(id string) (ip string, ok bool) {
-	// 	vm, ok := s.vms.Get(id)
-	// 	if !ok {
-	// 		return "", false
-	// 	}
-	// 	return vm.IP, true
-	// })
+	vmProxy, err := proxy.NewProxy(func(id string) (ip string, ok bool) {
+		vm, ok := s.vms.Get(id)
+		if !ok {
+			return "", false
+		}
+		return vm.IP, true
+	})
+	if err != nil {
+		log.Printf("error starting proxy in server : %v", err)
+		return nil
+	}
 	mux := http.NewServeMux()
+	mux.Handle("/vms/{id}/proxy/{port}/{path...}", vmProxy)
 	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("pong"))
 	})

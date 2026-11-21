@@ -58,6 +58,8 @@ func ensureTap(name string, bridge string) error {
 			LinkAttrs: la,
 			Mode:      netlink.TUNTAP_MODE_TAP,
 			Owner:     uint32(os.Getuid()),
+			//if leave this blank, go will make it 0 by default, 0 is root
+			Group: uint32(os.Getgid()),
 		}
 		link = &tap
 		err := netlink.LinkAdd(link)
